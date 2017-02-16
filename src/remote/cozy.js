@@ -45,12 +45,15 @@ export default class RemoteCozy {
     // Aliases:
     this.createFile = this.client.files.create
     this.createDirectory = this.client.files.createDirectory
+    this.updateFileById = this.client.files.updateById
   }
 
   createFile: (data: Readable, options: {
     name: string, dirID?: ?string, contentType?: ?string, lastModifiedDate?: ?Date
   }) => Promise<RemoteDoc>
   createDirectory: ({name: string, dirID: string}) => Promise<RemoteDoc>
+  updateFileById: (id: string, data: Readable,
+    options: {contentType?: ?string, lastModifiedDate?: ?Date }) => Promise<RemoteDoc>
 
   async changes (seq: number = 0) {
     let json = await this.client.data.changesFeed(FILES_DOCTYPE, { since: seq })
