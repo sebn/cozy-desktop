@@ -104,6 +104,24 @@ export default class Remote {
       .catch(callback)
   }
 
+  async overwriteFileAsync (doc: Metadata, old: Metadata): Promise<RemoteDoc> {
+    const stream = await this.other.createReadStreamAsync(doc)
+    const updated = await this.remoteCozy.updateFileById(doc.remote._id, stream, {
+      contentType: doc.mime,
+      lastModifiedDate: new Date(doc.lastModification)
+    })
+
+    doc.remote._rev = updated._rev
+
+    return updated
+  }
+
+  overwriteFile (doc: Metadata, old: Metadata, callback: Callback) {
+    this.overwriteFileAsync(doc, old)
+      .then(updated => callback(null, updated))
+      .catch(callback)
+  }
+
   // FIXME: Temporary stubs so we can do some acceptance testing on file upload
   //        without getting errors for methods not implemented yet.
 
