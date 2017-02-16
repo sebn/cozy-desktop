@@ -61,9 +61,25 @@ export async function deleteAll () {
 // Creates a root directory named 'couchdb-folder', used in a lot of v2 tests.
 //
 // TODO: Use test data builders instead
+let theCouchdbFolder
 export async function createTheCouchdbFolder () {
-  await builders.dir()
+  theCouchdbFolder = await builders.dir()
     .named('couchdb-folder')
     .inRootDir()
+    .build()
+}
+
+export function createFolder (i) {
+  return builders.dir()
+    .named(`folder-${i}`)
+    .inDir(theCouchdbFolder)
+    .build()
+}
+
+export function createFile (i) {
+  return builders.file()
+    .named(`file-${i}`)
+    .inDir(theCouchdbFolder)
+    // .checksum(`111111111111111111111111111111111111112${i}`)
     .build()
 }
