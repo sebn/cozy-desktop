@@ -1,0 +1,215 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Cozy Drive for Desktop: moving and renaming directories</title>
+  <script src="bower_components/jquery/dist/jquery.min.js"></script>
+  <script src="bower_components/bower-webfontloader/webfont.js"></script>
+  <script src="bower_components/snap.svg/dist/snap.svg-min.js"></script>
+  <script src="bower_components/underscore/underscore-min.js"></script>
+  <script src="bower_components/js-sequence-diagrams/dist/sequence-diagram-min.js"></script>
+  <script src="bower_components/viz.js/viz.js"></script>
+</head>
+<body>
+  <h1>Cozy Drive for Desktop: moving and renaming directories</h1>
+
+  <h2>How it currently works</h2>
+
+  <h3>Local move on macOS</h3>
+
+  <div class="sequence">
+    chokidar->LocalWatcher: unlinkDir /src/dir/empty-subdir/
+    chokidar->LocalWatcher: unlinkDir /src/dir/subdir/
+    chokidar->LocalWatcher: unlinkDir /src/dir/
+    chokidar->LocalWatcher: addDir /dst/dir/
+    LocalWatcher->Prep: addFolder /dst/dir/
+    chokidar->LocalWatcher: addDir /dst/dir/empty-subdir/
+    LocalWatcher->Prep: addFolder /dst/dir/empty-subdir/
+    chokidar->LocalWatcher: addDir /dst/dir/subdir/
+    LocalWatcher->Prep: addFolder /dst/dir/subdir/
+    chokidar->LocalWatcher: unlink /src/dir/subdir/file
+    chokidar->LocalWatcher: add /dst/dir/subdir/file
+    LocalWatcher->Prep: moveFile /src/dir/subdir/file → /dst/dir/subdir/file
+    LocalWatcher->Prep: deleteFolder /src/dir/empty-subdir/
+    LocalWatcher->Prep: deleteFolder /src/dir/subdir/
+    LocalWatcher->Prep: deleteFolder /src/dir/
+    Prep-->Merge:
+    Merge-->Pouch:
+    Pouch-->Sync:
+    Sync->Remote: addFolder /dst/
+    Sync->Remote: addFolder /dst/empty-subdir/
+    Sync->Remote: addFolder /dst/subdir/
+    Sync->Remote: moveFile /src/dir/subdir/file → /dst/dir/subdir/file
+    Sync->Remote: trash /src/dir/empty-subdir/
+    Remote->Remote: deleteFolder /src/dir/empty-subdir/
+    Sync->Remote: trash /src/dir/subdir/
+    Remote->Remote: deleteFolder /src/dir/subdir/
+    Sync->Remote: trash /src/dir/
+    Remote->Remote: deleteFolder /src/dir/
+    Remote-->"cozy-stack": ...
+    RemoteWatcher->"cozy-stack": Changes?
+    "cozy-stack"-->RemoteWatcher: /dst/
+    "cozy-stack"-->RemoteWatcher: /dst/subdir/
+    "cozy-stack"-->RemoteWatcher: /dst/empty-subdir/
+    "cozy-stack"-->RemoteWatcher: /dst/subdir/file
+    "cozy-stack"-->RemoteWatcher: deleted /src/subdir/
+    "cozy-stack"-->RemoteWatcher: deleted /src/empty-subdir/
+    "cozy-stack"-->RemoteWatcher: deleted /src/
+    Note right of RemoteWatcher: up-to-date
+  </div>
+
+  <h3>Lucky local move on Windows</h3>
+
+  <div class="sequence">
+    chokidar->LocalWatcher: addDir /dst/dir/
+    LocalWatcher->Prep: addFolder /dst/dir/
+    chokidar->LocalWatcher: addDir /dst/dir/empty-subdir/
+    LocalWatcher->Prep: addFolder /dst/dir/empty-subdir/
+    chokidar->LocalWatcher: addDir /dst/dir/subdir/
+    LocalWatcher->Prep: addFolder /dst/dir/subdir/
+    chokidar->LocalWatcher: unlinkDir /src/dir/subdir/
+    chokidar->LocalWatcher: unlinkDir /src/dir/empty-subdir/
+    chokidar->LocalWatcher: unlinkDir /src/dir/
+    chokidar->LocalWatcher: unlink /src/dir/subdir/file
+    LocalWatcher->Prep: deleteFolder /src/dir/empty-subdir/
+    chokidar->LocalWatcher: add /dst/dir/subdir/file
+    LocalWatcher->Prep: moveFile /src/dir/subdir/file → /dst/dir/subdir/file
+    LocalWatcher->Prep: deleteFolder /src/dir/subdir/
+    LocalWatcher->Prep: deleteFolder /src/dir/
+  </div>
+
+  <h3>Completely broken local move on Windows</h3>
+
+  <div class="sequence">
+    chokidar->LocalWatcher: addDir /dst/dir/
+    chokidar->LocalWatcher: add /dst/dir/file1
+    chokidar->LocalWatcher: add /dst/dir/file2
+    chokidar->LocalWatcher: add /dst/dir/file3
+    LocalWatcher->Prep: addFile /dst/dir/file1
+    LocalWatcher->Prep: addFile /dst/dir/file2
+    chokidar->LocalWatcher: unlink /src/dir/file3
+    chokidar->LocalWatcher: unlink /src/dir/file2
+    chokidar->LocalWatcher: unlink /src/dir/file1
+    chokidar->LocalWatcher: unlinkDir /src/dir/
+    LocalWatcher->Prep: moveFile /src/dir/file3 → /dst/dir/file3
+    LocalWatcher->Prep: deleteFile /src/dir/file2
+    LocalWatcher->Prep: deleteFile /src/dir/file1
+    LocalWatcher->Prep: deleteFolder /src/dir/
+  </div>
+
+  <h2 id="issues">Issues</h2>
+
+  <div class="dot">
+    digraph {
+      unreliable_local_watcher[label="Unreliable LocalWatcher";fontcolor=red];
+      random_fs_events_order[label="Random FS events order";fontcolor=blue];
+      cozy_dir_move_breaks_desktop[label="Move & rename broken in Cozy";fontcolor=red];
+      sharing_konnectors_broken[label="Sharing & konnectors broken";fontcolor=red];
+      cozy_dir_deleted[label="Folder deleted in Cozy"];
+      local_dir_removed[label="Folder deleted locally"];
+      cozy_dir_trashed[label="Folder in Cozy trash"];
+      dir_id_lost[label="Folder ID lost"];
+      desktop_unlink_add[label="Folder moved locally = deleted & recreated"];
+      chokidar_unlink_add[label="Chokidar events unlinkDir + addDir"];
+      fs_unlink_add[label="FS events unlinkDir + addDir";fontcolor=blue];
+      stack_forbid[label="- Forbid in cozy-stack ?\n- Disable in Drive webapp ?";fontcolor=darkgreen];
+      desktop_forbid[label="Forbid in Desktop ? Auto-restore ?";fontcolor=darkgreen];
+      replace_chokidar[label="Chokidar replacement?";fontcolor=darkgreen];
+      aggregate_local_events[label="Aggregate local events ?";fontcolor=darkgreen];
+      windows_inodes[label="Windows inodes equivalent?";fontcolor=darkgreen];
+      store_remote_id_in_local_dir[label="Save remote id in folder?";fontcolor=darkgreen];
+      aggregate_remote_events[label="Aggregate remote events?";fontcolor=darkgreen];
+      dirs_only_in_changesfeed[label="Dirs only in changesfeed"];
+      only_paths_changed[label="Only paths changed"];
+      files_have_no_path[label="Files have no path"];
+      touch_files_in_stack[label="Touch files in stack?";fontcolor=darkgreen];
+      // files_not_moved_locally[label="Files not moved locally"];
+
+      unreliable_local_watcher -> {
+        random_fs_events_order
+        desktop_unlink_add
+      };
+
+      sharing_konnectors_broken -> {
+        dir_id_lost
+        cozy_dir_trashed
+      };
+
+      dir_id_lost -> {
+        local_dir_removed
+        cozy_dir_deleted
+        desktop_unlink_add
+      };
+
+      {
+        cozy_dir_deleted
+        cozy_dir_trashed
+      } -> stack_forbid;
+
+      cozy_dir_trashed -> local_dir_removed;
+      local_dir_removed -> desktop_forbid;
+      desktop_unlink_add -> chokidar_unlink_add -> fs_unlink_add;
+      desktop_unlink_add -> aggregate_local_events
+      chokidar_unlink_add -> replace_chokidar;
+
+      aggregate_local_events -> {
+        windows_inodes
+        store_remote_id_in_local_dir
+      };
+
+      cozy_dir_move_breaks_desktop -> dirs_only_in_changesfeed;
+      dirs_only_in_changesfeed -> {
+        only_paths_changed
+        files_have_no_path
+      } -> touch_files_in_stack;
+      cozy_dir_move_breaks_desktop -> aggregate_remote_events;
+    }
+  </div>
+
+  <h2 id="comparison">Comparison of the available solutions</h2>
+
+  <table>
+    <tr>
+      <th>Solution</th>
+      <th>Pros</th>
+      <th>Cons</th>
+    </tr>
+    <tr>
+      <td>Save remote ID in folder extended attribute</td>
+      <td>
+        <ul>
+          <li>ID can be retrieved as soon as folder event is received</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td>Save remote ID in hidden file</td>
+      <td>
+        <ul>
+          <li>Works on FAT32</li>
+        </ul>
+      </td>
+      <td>
+        <ul>
+          <li>Needs aggregation of folder event with hidden file event</li>
+          <li>ID is not available when folder is deleted</li>
+        </ul>
+      </td>
+    </tr>
+  </table>
+
+  <h2 id="links">Useful links</h2>
+  <ul>
+    <li><a href="https://qualapps.blogspot.fr/2010/05/understanding-readdirectorychangesw.html">
+      Understanding ReadDirectoryChangesW</a></li>
+  </ul>
+
+  <script>
+    $('.sequence').sequenceDiagram({theme: 'simple'});
+    $('.dot').each(function() {
+      var src = $(this).text();
+      var png = Viz(src, {format: 'png-image-element', engine: 'dot'});
+      $(this).replaceWith(png);
+    });
+  </script>
+</body>
+</html>

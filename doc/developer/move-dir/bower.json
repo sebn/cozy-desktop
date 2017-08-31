@@ -1,0 +1,9 @@
+{
+  "name": "cozy-desktop-doc",
+  "private": true,
+  "dependencies": {
+    "js-sequence-diagrams": "bramp/js-sequence-diagrams#^2.0.1",
+    "jquery": "^3.2.1",
+    "viz.js": "^1.8.0"
+  }
+}
